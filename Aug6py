@@ -1,0 +1,134 @@
+To achieve your requirements without hardcoding and to offer the three choices as described, let's refactor the `run.py` file accordingly. The code will dynamically handle file paths and avoid hardcoding within the logic itself.
+
+### Project Structure:
+
+```
+project_root/
+├── src/
+│   ├── config.py
+│   ├── parser.py
+│   ├── utils.py
+│   ├── run.py
+│   └── test/
+│       ├── test_data/
+│       │   ├── cbc-osb-common.xml
+│       │   ├── cbc-service-cbc-osb-dev01.xml
+│       │   ├── cbc-service-cbc-osb-common.xml
+│       │   ├── cbc-osb-dev01.xml
+│       │   ├── application.properties
+│       │   └── environment.properties
+│       ├── test_config.py
+│       ├── test_parser.py
+│       ├── test_utils.py
+│       └── test_run.py
+├── environment_op.properties
+├── updated_environment.properties
+```
+
+### `run.py`:
+
+```python
+import argparse
+from src.parser import read_properties_file, load_xml_files, resolve_properties
+from src.utils import output_properties, log_missing_and_removed_properties
+
+def main():
+    parser = argparse.ArgumentParser(description='Process properties files and XMLs.')
+    parser.add_argument('choice', type=int, choices=[1, 2, 3], 
+                        help='1: Print to console, 2: Output properties file, 3: Environment OP properties file')
+    parser.add_argument('app_properties', type=str, help='Path to application.properties file')
+    parser.add_argument('env_properties', type=str, help='Path to environment.properties file')
+    parser.add_argument('xml_directory', type=str, help='Directory containing XML files')
+    parser.add_argument('output_path', type=str, help='Output path for the updated environment properties file')
+    parser.add_argument('env_op_path', type=str, help='Output path for the environment_op properties file')
+
+    args = parser.parse_args()
+
+    choice = args.choice
+    app_properties_path = args.app_properties
+    env_properties_path = args.env_properties
+    xml_directory = args.xml_directory
+    output_path = args.output_path
+    env_op_path = args.env_op_path
+
+    # Read properties files
+    app_properties = read_properties_file(app_properties_path)
+    env_properties = read_properties_file(env_properties_path)
+
+    # Load XML files
+    xml_files = load_xml_files(xml_directory)
+
+    # Resolve properties
+    resolved_properties, env_op_properties = resolve_properties(app_properties, env_properties, xml_files)
+
+    if choice == 1:
+        # Print to console
+        print("Resolved Properties:")
+        for key, value in resolved_properties.items():
+            print(f"{key}={value}")
+        print("\nEnvironment OP Properties:")
+        for key, value in env_op_properties.items():
+            print(f"{key}={value}")
+    elif choice == 2:
+        # Output properties to file
+        output_properties(resolved_properties, output_path)
+    elif choice == 3:
+        # Output environment_op.properties
+        output_properties(env_op_properties, env_op_path)
+
+    # Log missing and removed properties
+    log_missing_and_removed_properties(app_properties, env_properties, 'missing_properties.log', 'removed_properties.log')
+
+if __name__ == "__main__":
+    main()
+```
+
+### `parser.py`:
+
+```python
+import os
+from xml.etree import ElementTree as ET
+
+def read_properties_file(file_path):
+    properties = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            if '=' in line and line.strip() and not line.startswith('#'):
+                key, value = line.strip().split('=', 1)
+                properties[key] = value
+    return properties
+
+def load_xml_files(directory):
+    xml_files = {}
+    for file_name in os.listdir(directory):
+        if file_name.endswith('.xml'):
+            file_path = os.path.join(directory, file_name)
+            xml_files[file_name] = ET.parse(file_path).getroot()
+    return xml_files
+
+def resolve_properties(app_properties, env_properties, xml_files):
+    resolved_properties = {}
+    env_op_properties = {}
+    
+    for key, value in app_properties.items():
+        if value.startswith('${') and value.endswith('}'):
+            prop_name = value[2:-1]
+            if prop_name in env_properties:
+                resolved_properties[key] = env_properties[prop_name]
+            else:
+                env_op_properties[key] = value
+        else:
+            resolved_properties[key] = value
+    
+    return resolved_properties, env_op_properties
+```
+
+### `utils.py`:
+
+```python
+def output_properties(properties, file_path):
+    with open(file_path, 'w') as file:
+        for key, value in properties.items():
+            file.write(f"{key}={value}\n")
+
+def log_missing_and_removed_properties(app_properties, env_properties, missing
